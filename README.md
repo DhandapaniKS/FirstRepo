@@ -1,724 +1,421 @@
-app.module.ts
+services
 
-import { BrowserModule } from '@angular/platform-browser';
-import { NgModule } from '@angular/core';
-import { Routes,RouterModule } from '@angular/router';
-import { HttpClientModule } from '@angular/common/http';
-import { FormsModule } from '@angular/forms';
-import { CommonModule } from '@angular/common';
-import { BrowserAnimationsModule  } from '@angular/platform-browser/animations';
-import { ToastrModule } from 'ngx-toastr';
+services/auth
 
-import { AppComponent } from './app.component';
-import { FirstComponent } from './first/first.component';
-import { SecondComponent } from './second/second.component';
-import { UpdateDataService } from './services/updateData.service';
-import { BooksListComponent } from './book/books-list/books-list.component';
-import { AddBookComponent } from './book/add-book/add-book.component';
-import { EditBookComponent } from './book/edit-book/edit-book.component';
-import { BookService } from './services/book-service.service';
 
-const routes: Routes = [
-{ path: "one", component: FirstComponent},
-{ path: "two", component: SecondComponent},
-{ path: "books", component: BooksListComponent},
-{ path: "addBook", component: AddBookComponent}
-];
+import { Injectable } from '@angular/core';
+import { HttpInterceptor, HttpHandler, HttpRequest, HTTP_INTERCEPTORS } from '@angular/common/http';
+import { TokenStorageService } from '../auth/token-storage.service';
 
-@NgModule({
-  declarations: [
-    AppComponent,
-    FirstComponent,
-    SecondComponent,
-    BooksListComponent,
-    AddBookComponent,
-    EditBookComponent
-  ],
-  imports: [
-    BrowserModule,
-    RouterModule.forRoot(routes),
-    HttpClientModule,
-    FormsModule,
-    CommonModule,
-    BrowserAnimationsModule,
-    ToastrModule.forRoot()
-  ],
-  providers: [UpdateDataService,BookService],
-  bootstrap: [AppComponent]
+const TOKEN_HEADER_KEY = 'Authorization';
+
+@Injectable({
+  providedIn: 'root'
 })
-export class AppModule { }
+export class AuthInterceptor implements HttpInterceptor {
 
-models
+  constructor(private tokenStorageService: TokenStorageService) { }
 
-export class AppResponse{
-    message:string;
-    result: boolean;
-    data: any;
-    dataList: any
-    constructor(){
-
+  intercept(req: HttpRequest<any>, next: HttpHandler){
+    let authReq = req;
+    const token = this.tokenStorageService.getToken();
+    if(token != null){
+      authReq = req.clone({headers: req.headers.set(TOKEN_HEADER_KEY, 'Bearer '+token)});
     }
+    return next.handle(authReq);
+  }
 }
 
-export class Book {
-    id: number;
-    title: string;
-    author: string;
+export const httpInterceptorProviders = [{provide: HTTP_INTERCEPTORS, userClass: AuthInterceptor, multi: true} ];
 
-    constructor() {
+-------
 
-    }
-}
-
-service 
 
 import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
-@Injectable()
-export class UpdateDataService {
-private myNumber = new BehaviorSubject<number>(1);
-cast = this.myNumber.asObservable();
-
-constructor(){
-
-}
-
-updateNumber(number){
-    this.myNumber.next(number);
-}
-}
-
-import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Book } from '../models/book.model';
-import { AppResponse } from '../models/appResponse.model';
+import { HttpHeaders, HttpClient } from '@angular/common/http';
+import { Observable  } from 'rxjs';
+import { AuthLoginInfo } from '../../models/auth/login-info';
+import { SignUpInfo } from '../../models/auth/signup-info';
+import { JwtResponse } from '../../models/auth/jwt-reponse';
 
 const httpOptions = {
-  headers: new HttpHeaders({
-    'Content-Type': 'application/json'
-  })
+  headers: new HttpHeaders({'Content-Type': 'application/json'})
 };
 
 @Injectable({
   providedIn: 'root'
 })
-export class BookService {
+export class AuthService {
 
-  BOOK_API_URL: string = "http://localhost:8080/bookapi/";
+  private loginUrl = 'http://localhost:8080/api/auth/signin';
+  private signupUrl = 'http://localhost:8080/api/auth/signup';
 
+  constructor(private http: HttpClient) { }
 
-  constructor(private httpClient: HttpClient) { }
-
-
-  getBooks() {
-    return this.httpClient.get<AppResponse>(this.BOOK_API_URL + "books");
+  attemptAuth(credentials: AuthLoginInfo): Observable<JwtResponse> {
+    return this.http.post<JwtResponse>(this.loginUrl, credentials, httpOptions);
   }
 
-  getBookById(id: number) {
-
-  }
-
-  updateBook(id: number, book: Book) {
-
-  }
-
-  deletBookById(id: number) {
-    return this.httpClient.delete<AppResponse>(this.BOOK_API_URL+"delete/"+id,httpOptions);
-  }
-
-  saveBook(book: Book) {
-    return this.httpClient.post<AppResponse>(this.BOOK_API_URL+"save", book, httpOptions);
+  signUp(info: SignUpInfo): Observable<string>{
+    return this.http.post<string>(this.signupUrl, info, httpOptions);
   }
 }
 
-app component
+---------
 
-ts
+import { Injectable } from '@angular/core';
 
-import { Component } from '@angular/core';
-
-@Component({
-  selector: 'app-root',
-  templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css']
+const TOKEN_KEY = 'AuthToken';
+const USERNAME_KEY = 'AuthUsername';
+const AUTHORITIES_KEY = 'AuthAuthorities';
+@Injectable({
+  providedIn: 'root'
 })
-export class AppComponent {
-  title = 'App';
-}
+export class TokenStorageService {
 
+  private roles: Array<string> = [];
+  constructor() { }
 
-html
-
-<nav class="navbar navbar-default">
-  <div class="container-fluid">
-    <div class="navbar-header">
-      <a class="navbar-brand active" href="#">Books Managment</a>
-    </div>
-    <ul class="nav navbar-nav">
-      <li><a routerLink="/one">First</a></li>
-      <li><a routerLink="/two">Second</a></li>
-      <li><a routerLink="/books">Books</a></li>
-    </ul>
-  </div>
-</nav>
-
-<router-outlet></router-outlet>
-
-
-
-first
-
-import { Component, OnInit } from '@angular/core';
-import { UpdateDataService } from '../services/updateData.service';
-
-@Component({
-  selector: 'app-first',
-  templateUrl: './first.component.html',
-  styleUrls: ['./first.component.css']
-})
-export class FirstComponent implements OnInit {
-
-  no: number = 0;
-
-  constructor(private updateDataService: UpdateDataService) { 
-    setInterval(() => { this.UpdateNewNumber() },1000);
+  signOut(){
+    window.sessionStorage.clear();
   }
 
-  ngOnInit() {
-    this.updateDataService.cast.subscribe(num => this.no = num);
-  }
- 
-  UpdateNewNumber(){
-      this.updateDataService.updateNumber(this.no);
-      this.no++;
-      
+  public saveToken(token: string){
+    window.sessionStorage.removeItem(TOKEN_KEY);
+    window.sessionStorage.setItem(TOKEN_KEY,token);
   }
 
-}
-
-
-html
-
-<p>
-  first works!
-</p>
-
-
-second/second
-
-import { Component, OnInit } from '@angular/core';
-import { UpdateDataService } from '../services/updateData.service';
-import  Swal  from 'sweetalert2';
-
-@Component({
-  selector: 'app-second',
-  templateUrl: './second.component.html',
-  styleUrls: ['./second.component.css']
-})
-export class SecondComponent implements OnInit {
-
-  no: number;
-
-  constructor(private updateDataService: UpdateDataService) { 
-    setInterval(() => { this.notify() });
+  public getToken(): string {
+    return window.sessionStorage.getItem(TOKEN_KEY);
   }
 
-  ngOnInit() {
-    this.updateDataService.cast.subscribe(num => this.no = num);
+  public saveUsername(username: string){
+    window.sessionStorage.removeItem(USERNAME_KEY);
+    window.sessionStorage.setItem(USERNAME_KEY, username);
   }
 
-  notify(){
-    if(this.no ==10){
-      Swal.fire("You have reached 10");
-    //   Swal.fire({
-    //   title: "Alert",
-    //   text: "You have reached 10",
-    //   type: 'warning',
-    //   showConfirmButton: true,
-    //   showCancelButton: true,
-    //   confirmButtonText: 'Yes, delete it!',
-    //   cancelButtonText: 'No, keep it'
-    // }).then((result) => {
-    //   if(result.value){
-    //     Swal.fire("Success");
-    //   }else{
-    //     Swal.fire("Fail");
-    //   }
-    //   console.log(result)
-    // });
-  }
-}
-}
-
-
-html
-
-<p>
-  second works!
-</p>
-
-{{no}}
-
-
-book-list
-
-import { Component, OnInit } from '@angular/core';
-import { Book } from '../../models/book.model';
-import { BookService } from '../../services/book-service.service';
-import  Swal  from 'sweetalert2';
-import { ToastrService } from 'ngx-toastr';
-
-
-@Component({
-  selector: 'app-books-list',
-  templateUrl: './books-list.component.html',
-  styleUrls: ['./books-list.component.css']
-})
-export class BooksListComponent implements OnInit {
-
-  books: any = [];
-  constructor(private bookService: BookService,private toastr: ToastrService) { }
-
-  ngOnInit() {
-    this.getBooks();
+  public getUsername():string {
+    return sessionStorage.getItem(USERNAME_KEY);
   }
 
-  getBooks(){
-    this.bookService.getBooks().subscribe(data => {
-      console.log(data.dataList[0]);
-      this.books = data.dataList[0];
-      console.log("Books -> ",this.books);
-  });
-  
-}
+  public saveAuthorities(authorities: string[]) {
+    sessionStorage.removeItem(AUTHORITIES_KEY);
+    sessionStorage.setItem(AUTHORITIES_KEY, JSON.stringify(authorities));
+  }
 
-deletBookById(id: number){
-  this.bookService.deletBookById(id).subscribe(data => {
-    var deleteResponse = data.result;
-    if(deleteResponse){
-      this.toastr.success("Book with Id "+id+" deleted successfully","Delete Employee");
-      this.getBooks();
+  public getAuthorities(): string[]{
+    this.roles = [];
+    if(sessionStorage.getItem(TOKEN_KEY)){
+      JSON.parse(sessionStorage.getItem(AUTHORITIES_KEY)).forEach(authority => {
+        this.roles.push(authority.authority);
+      });
     }
-  });
+    return this.roles;
+  }
+
 }
+------------
+
+
+userservice
+
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class UserService {
+
+  private userUrl = 'http://localhost:8080/api/test/user';
+  private pmUrl = 'http://localhost:8080/api/test/pm';
+  private adminUrl = 'http://localhost:8080/api/test/admin';
+
+  constructor(private http: HttpClient) { }
+
+  getUserBoard(): Observable<string> {
+    return this.http.get(this.userUrl, { responseType: 'text' });
+  }
+
+  getPMBoard(): Observable<string> {
+    return this.http.get(this.pmUrl, { responseType: 'text' });
+  }
+
+  getAdminBoard(): Observable<string> {
+    return this.http.get(this.adminUrl, { responseType: 'text' });
+  }
 }
 
-html
 
-<div class="container">
-  <div class="row">
-      <div class="col-sm-2">
-        </div>
-        <div class="col-sm-8">
-            <a routerLink="/addBook"><button type="button" class="btn btn-primary btn-sm">New Book</button></a>
-            <br><br>
-            <table class="table table-striped table-bordered" id="books_data_table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>TITLE</th>
-                    <th>AUTHOR</th>
-                    <th colspan="3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let book of books">
-                    <td>{{book.id}}</td>
-                    <td>{{book.title}}</td>
-                    <td>{{book.author}}</td>
-                    <td><button type="button" class="btn btn-success btn-sm" (click)="updateBook(book.id)">Update</button></td>
-                    <td><button type="button" class="btn btn-warning btn-sm" (click)="deletBookById(book.id)">Delete</button></td>
-                  </tr>
-                </tbody>
-              </table>
-        </div>
-        <div class="col-sm-2">
-        </div>
-  </div>
-  
+component
+
+admin - ts
+
+import { Component, OnInit } from '@angular/core';
+
+@Component({
+  selector: 'app-admin',
+  templateUrl: './admin.component.html',
+  styleUrls: ['./admin.component.css']
+})
+export class AdminComponent implements OnInit {
+
+  constructor() { }
+
+  ngOnInit() {
+  }
+
+}
+
+
+admin - html
+
+
+home - ts
+
+import { Component, OnInit } from '@angular/core';
+import { TokenStorageService } from '../services/auth/token-storage.service';
+
+@Component({
+  selector: 'app-home',
+  templateUrl: './home.component.html',
+  styleUrls: ['./home.component.css']
+})
+export class HomeComponent implements OnInit {
+
+  info: any;
+
+  constructor(private tokenStorageService: TokenStorageService) { }
+
+  ngOnInit() {
+    this.info = {
+      token: this.tokenStorageService.getToken(),
+      username: this.tokenStorageService.getUsername(),
+      authorities: this.tokenStorageService.getAuthorities()
+    };
+  }
+
+  logout() {
+    this.tokenStorageService.signOut();
+  }
+
+}
+
+
+home - html
+
+<div *ngIf="info.token; else loggedOut">
+  <h5 class="text-primary">Your Info</h5>
+  <p>
+    <strong>Username </strong>{{info.username}}<br/>
+    <strong>Password </strong>{{info.password}}<br/>
+    <strong>Username </strong>{{info.username}}<br/>
+  </p>
+  <button class="btn btn-secondary" type="button" (click)="logout()"></button>
 </div>
 
-add-book/add-book
+login - ts
 
 import { Component, OnInit } from '@angular/core';
-import { Book } from '../../models/book.model';
-import { BookService } from '../../services/book-service.service';
+import { AuthLoginInfo } from '../models/auth/login-info';
+import { AuthService } from '../services/auth/auth.service';
+import { TokenStorageService } from '../services/auth/token-storage.service';
 
 @Component({
-  selector: 'app-add-book',
-  templateUrl: './add-book.component.html',
-  styleUrls: ['./add-book.component.css']
+  selector: 'app-login',
+  templateUrl: './login.component.html',
+  styleUrls: ['./login.component.css']
 })
-export class AddBookComponent implements OnInit {
-
-  book = new Book()
-
-  constructor(private bookService: BookService) { }
+export class LoginComponent implements OnInit {
+form: any[];
+isLoggedIn = false;
+isLoginFailed = false;
+errorMessage = '';
+roles: string[] = [];
+private loginInfo: AuthLoginInfo;
+  constructor(private authService: AuthService, private tokenStorageService: TokenStorageService) { }
 
   ngOnInit() {
+    if(this.tokenStorageService.getToken()){
+      this.isLoggedIn = true;
+      this.roles = this.tokenStorageService.getAuthorities();
+    }
   }
 
-  saveEmployee(){
-    this.bookService.saveBook(this.book).subscribe(data => {
-      this.book = data.data;
-      if(data.result){
-        console.log("Saved");
-      }
+  onsubmit(){
+    console.log(this.form);
+    this.loginInfo = new AuthLoginInfo(this.form.username,this.form.password);
+    this.authService.attemptAuth(this.loginInfo).subscribe( data => {
+      this.tokenStorageService.saveToken(data.accessToken);
+      this.tokenStorageService.saveUsername(data.username);
+      this.tokenStorageService.saveAuthorities(data.authorities);
+      this.isLoginFailed = false;
+      this.isLoggedIn = true;
+      this.roles = this.tokenStorageService.getAuthorities();
+      this.reloadPage();
+    }, error => {
+      console.log(error);
+      this.errorMessage = error.error.message;
+      this.isLoginFailed = true;
     });
   }
+
+  reloadPage(){
+    window.location.reload();
+  }
+
+
 }
 
 
-html
+login - html
 
-<div class="container">
-  <div class="row">
-    <div class="col-sm-2"></div>
-    <div class="col-sm-8">
-      <div class="panel panel-primary">
-        <div class="panel-heading">New Employee</div>
-        <div class="panel-body">
-          <form #addEmployeeForm="ngForm" (ngSubmit)="saveEmployee()">
-            <div class="form-group">
-              <label>Title</label>
-              <input class="form-control" type="text" name="title" [(ngModel)]="book.title" required/>
-            </div>
-            <div class="form-group">
-              <label>Author</label>
-              <input class="form-control" type="text" name="author" [(ngModel)]="book.author" required/>
-            </div>
-            <div>
-              <button class="btn btn-success" type="submit" [disabled]="!addEmployeeForm.form.valid">Save</button>
-            </div>
-          </form>
+<div *ngIf="isLoggedIn; else loggedOut">
+  Logged in as {{roles}}.
+</div>
+<ng-template #loggedOut>
+  <div class="row col-sm-6">
+    <form name="loginForm" (ngSubmit)="onSubmit()" #loginForm="ngForm" novalidate>
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" class="form-control" name="username" [(ngModel)]="form.username" #username="ngModel" required/>
+        <div *ngIf="loginForm.submitted && username.invalid">
+          <div *ngIf="username.errors.required">Username is required</div>
         </div>
       </div>
-    </div>
-    <div class="col-sm-2"></div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" class="form-control" name="password" [(ngModel)]="form.password" #password="ngModel" required/>
+        <div *ngIf="loginForm.submitted && password.invalid">
+          <div *ngIf="password.errors.required">Username is required</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <button class="btn btn-primary" type="submit">Login</button>
+        <div *ngIf="loginForm.submitted && loginFailed" class="alert alert-danger">
+          Login failed : {{errorMessage}}
+        </div>
+      </div>
+    </form>
+    <hr>
+    <p>Don't have an account?</p>
+    <a href="signup" class="btn btn-success">Sing Up</a>
   </div>
+</ng-template>
+
+
+pm - ts
+
+pm - html
+
+register - ts
+
+import { Component, OnInit } from '@angular/core';
+import { SignUpInfo } from '../models/auth/signup-info';
+import { AuthService } from '../services/auth/auth.service';
+
+@Component({
+  selector: 'app-register',
+  templateUrl: './register.component.html',
+  styleUrls: ['./register.component.css']
+})
+export class RegisterComponent implements OnInit {
+  form: any = {};
+  signupInfo: SignUpInfo;
+  isSignedUp = false;
+  isSignedUpFailed = false;
+  errorMessage = "";
+  constructor(private authService: AuthService) { }
+
+  ngOnInit() {
+  }
+
+  onSubmit() {
+    console.log(this.form);
+    this.signupInfo = new SignUpInfo(this.form.name, this.form.username, this.form.email, this.form.password);
+    this.authService.signUp(this.signupInfo).subscribe(data => {
+      console.log(data);
+      this.isSignedUp = true;
+      this.isSignedUpFailed = false;
+    }, error => {
+      console.log(error);
+      this.errorMessage = error.error.message;
+      this.isSignedUpFailed = true;
+    })
+  }
+
+}
+
+
+register - html
+
+<div *ngIf="isSignedUp; else signupForm">
+  Your registration successful. Please login
 </div>
 
+<ng-template #signupForm>
+  <div class="row col-sm-6">
+    <form name="registerForm" #registerForm="ngForm" novalidate>
+      <div class="form-group">
+        <label for="name">Name</label>
+        <input type="text" class="form-control" name="name" [(ngModel)]="form.name" #name="ngModel" required/>
+        <div *ngIf="registerForm.submitted && name.invalid">
+          <div *ngIf="name.errors.required">Name is required</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="name">Username</label>
+        <input type="text" class="form-control" name="username" [(ngModel)]="form.username" #username="ngModel" required/>
+        <div *ngIf="registerForm.submitted && username.invalid">
+          <div *ngIf="username.errors.required">Username is required</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="name">Email</label>
+        <input type="text" class="form-control" name="email" [(ngModel)]="form.email" #email="ngModel" required/>
+        <div *ngIf="registerForm.submitted && email.invalid">
+          <div *ngIf="email.errors.required">Email is required</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="name">Password</label>
+        <input type="text" class="form-control" name="password" [(ngModel)]="form.password" #password="ngModel" required/>
+        <div *ngIf="registerForm.submitted && password.invalid">
+          <div *ngIf="password.errors.required">Email is required</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <button class="btn btn-primary">Register</button>
+        <div *ngIf="registeForm.submitted && isSignupFailed" class="alert alert-warning">
+          Singup failed!
+          <br/>{{errorMessage}}
+        </div>
+      </div>
+    </form>
+  </div>
+</ng-template>
 
+user - ts
 
+import { Component, OnInit } from '@angular/core';
+import { UserService } from '../services/user.service';
 
+@Component({
+  selector: 'app-user',
+  templateUrl: './user.component.html',
+  styleUrls: ['./user.component.css']
+})
+export class UserComponent implements OnInit {
+  board: string;
+  errorMessage: string;
+  constructor(private userService: UserService) { }
 
-
-App tier
-
-
-application.properties
-
-# Database Properties
-spring.datasource.username= jagans
-spring.datasource.password= Jagan@123
-spring.datasource.driver-class-name= com.mysql.jdbc.Driver
-spring.datasource.url= jdbc:mysql://202.83.25.105:2217/RESERVATION
-
-#Hibernate Properties
-
-hibernate.show_sql = true
-hibernate.hbm2ddl.auto = update
-
-model
-
-
-package com.aalam.assesment.model;
-
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.Table;
-
-@Entity
-@Table(name = "books")
-public class Book {
-
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
-	private String title;
-	private String author;
-
-	public Long getId() {
-		return id;
-	}
-
-	public void setId(Long id) {
-		this.id = id;
-	}
-
-	public String getTitle() {
-		return title;
-	}
-
-	public void setTitle(String title) {
-		this.title = title;
-	}
-
-	public String getAuthor() {
-		return author;
-	}
-
-	public void setAuthor(String author) {
-		this.author = author;
-	}
-
-	public Book(Long id, String title, String author) {
-		super();
-		this.id = id;
-		this.title = title;
-		this.author = author;
-	}
-
-	public Book() {
-		super();
-	}
-
-	@Override
-	public String toString() {
-		return "Book [id=" + id + ", title=" + title + ", author=" + author + "]";
-	}
-}
-
-
-controller
-
-package com.aalam.assesment.controller;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import com.aalam.assesment.model.Book;
-import com.aalam.assesment.response.Response;
-import com.aalam.assesment.service.BookService;
-
-@RestController
-@RequestMapping("/bookapi")
-@CrossOrigin
-public class BookController {
-
-	@Autowired
-	private BookService bookService;
-	
-	@GetMapping("/books")
-	public ResponseEntity<Response> getBooks(){
-		Response response = new Response();
-		List<Object> dataList = new ArrayList<>();
-		List<Book> books = this.bookService.getBooks();
-		dataList = Arrays.asList(books);
-		response.setDataList(dataList);
-		response.setResult(true);
-		response.setMessage("Fetched the books successfully");
-		return ResponseEntity.ok(response);
-	}
-	
-	@GetMapping("/book/{id}")
-	public ResponseEntity<Response> getBookById(@PathVariable("id") Long id){
-		Response response = new Response();
-		Book book = this.bookService.getBookById(id);
-		response.setResult(true);
-		response.setMessage("Fetched the book successfully");
-		Object data = (Object)book;
-		response.setData(data);
-		return ResponseEntity.ok(response);
-	}
-	
-	@PostMapping("/save")
-	public ResponseEntity<Response> saveBook(@RequestBody Book book){
-		Book savedBook = this.bookService.saveBook(book);
-		Object data = (Object) savedBook;
-		Response response = new Response();
-		response.setData(data);
-		response.setMessage("Saved successfully");
-		response.setResult(true);
-		return ResponseEntity.ok(response);
-	}
-	
-	@PutMapping("/update/{id}")
-	public ResponseEntity<Response> updateBook(@PathVariable("id") Long id, @RequestBody Book book){
-		Book foundBook = this.bookService.getBookById(id);
-			Book savedBook = this.bookService.saveBook(book);
-			Object data = (Object) savedBook;
-			Response response = new Response();
-			response.setData(data);
-			response.setMessage("Updated successfully");
-			response.setResult(true);
-			return ResponseEntity.ok(response);
-	}
-	
-	@DeleteMapping("/delete/{id}")
-	public ResponseEntity<Response> deletBookById(@PathVariable("id") Long id){
-		this.bookService.deletBookById(id);
-		Response response = new Response();
-		response.setMessage("Deleted successfully");
-		response.setResult(true);
-		return ResponseEntity.ok(response);
-	}
-}
-
-service
-
-package com.aalam.assesment.service;
-
-import java.util.List;
-
-import org.springframework.stereotype.Service;
-
-import com.aalam.assesment.model.Book;
-
-@Service
-public interface BookService {
-	public List<Book> getBooks();
-	public Book getBookById(Long id);
-	public Book saveBook(Book book);
-	public boolean deletBookById(Long id);
-}
-
-
-service impl
-
-package com.aalam.assesment.service.impl;
-
-import java.util.List;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
-import com.aalam.assesment.model.Book;
-import com.aalam.assesment.repository.BookRepository;
-import com.aalam.assesment.service.BookService;
-
-@Service
-public class BookServiceImpl implements BookService {
-
-	@Autowired
-	private BookRepository bookRepository;
-
-	@Override
-	public List<Book> getBooks() {
-		return this.bookRepository.findAll();
-	}
-
-	@Override
-	public Book getBookById(Long id) {
-
-		return this.bookRepository.findOne(id);
-	}
-
-	@Override
-	public Book saveBook(Book book) {
-
-		return this.bookRepository.save(book);
-	}
-
-	@Override
-	public boolean deletBookById(Long id) {
-		this.bookRepository.delete(id);
-		return true;
-	}
+  ngOnInit() {
+  }
 
 }
 
-repository
-package com.aalam.assesment.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-
-import com.aalam.assesment.model.Book;
-
-@Repository
-public interface BookRepository extends JpaRepository<Book, Long> {
-
-}
-
-response
-
-package com.aalam.assesment.response;
-
-import java.util.List;
-
-public class Response {
-	private String message;
-	private boolean result;
-	private Object data;
-	private List<Object> dataList;
-
-	public Response() {
-		super();
-	}
-
-	public Response(String message, boolean result, Object data, List<Object> dataList) {
-		super();
-		this.message = message;
-		this.result = result;
-		this.data = data;
-		this.dataList = dataList;
-	}
-
-	public String getMessage() {
-		return message;
-	}
-
-	public void setMessage(String message) {
-		this.message = message;
-	}
-
-	public boolean isResult() {
-		return result;
-	}
-
-	public void setResult(boolean result) {
-		this.result = result;
-	}
-
-	public Object getData() {
-		return data;
-	}
-
-	public void setData(Object data) {
-		this.data = data;
-	}
-
-	public List<Object> getDataList() {
-		return dataList;
-	}
-
-	public void setDataList(List<Object> dataList) {
-		this.dataList = dataList;
-	}
-
-	@Override
-	public String toString() {
-		return "Response [message=" + message + ", result=" + result + ", data=" + data + ", dataList=" + dataList
-				+ "]";
-	}
-
-}
-
-queries
-
-create table books(id int not null primary key auto_increment, title varchar(100) not null, author varchar(100) not null);
-show tables;
-select * from books;
-
-
-
-
-
-
+user - html
 
